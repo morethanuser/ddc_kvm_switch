@@ -227,6 +227,10 @@ int main(void) {
             cmd(dvi, dvi, CMD_LENGTH);
             // disable relay power
             delay = 1;
+
+            // additional delay, because previous loop was shorter
+            // due to delay = 0
+            _delay_ms(100);
          }
 
       if (right != right_prev)
