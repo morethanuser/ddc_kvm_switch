@@ -7,6 +7,7 @@
 
 #include <avr/io.h>
 #include <util/delay.h>
+#include <stdlib.h>
 
 // lines to monior DDC
 #define SDA_LEFT  PB2
@@ -18,7 +19,7 @@
 #define RIGHT PB4
 
 // ADC threshold
-#define THRESHOLD 0x15
+#define THRESHOLD 0x1F
 
 // payloads
 const uint8_t analog[] = {0x6E, 0x51, 0x84, 0x03, 0x60, 0x00, 0x01, 0xd9};
@@ -135,24 +136,25 @@ void cmd(const uint8_t *left, const uint8_t *right, const uint8_t length) {
 /****************************************************************************/
 /* General function for getting ADC data.                                   */
 /****************************************************************************/
-uint16_t get(uint8_t pin) {
+uint16_t get() {
 
-   ADCH=0x00;
-   ADCL=0x00;
+   uint16_t res1 = 0;
+   uint16_t res2 = 0;
+   uint16_t res3 = 0;
 
-   // reset pin register
-   ADMUX&=~0x07;
-
-   // get data from pin
-   ADMUX|=pin;
-
-   // start
    H(ADCSRA, ADSC);
-
-   // wait for end
    while(IS(ADCSRA, ADSC));
+   res1 = ADCW;
 
-   return ADCW;
+   H(ADCSRA, ADSC);
+   while(IS(ADCSRA, ADSC));
+   res2 = ADCW;
+
+   H(ADCSRA, ADSC);
+   while(IS(ADCSRA, ADSC));
+   res3 = ADCW;
+
+   return (res1 + res2 + res3) / 3;
 }
 
 
@@ -167,6 +169,7 @@ int main(void) {
 
    L(ADMUX, ADLAR);
    H(ADCSRA, ADEN);
+   H(ADCSRA, ADPS2);
 
    // setup IR drivers
    H(DDRB, LEFT);
@@ -192,12 +195,12 @@ int main(void) {
    while(1) {
 
       // get base for adc change detection
-      adc_val = get(0);
+      adc_val = get();
 
       // check if left IR reflection hit PIN diode
       L(PORTB, LEFT);
       _delay_us(500);
-      if (abs(adc_val - get(0)) > THRESHOLD)
+      if (abs(adc_val - get()) > THRESHOLD)
          left = 1;
       else
          left = 0;
@@ -209,13 +212,10 @@ int main(void) {
       if(delay)
          _delay_ms(50);
 
-      // get base for adc change detection
-      adc_val = get(0);
-
       // check if right IR reflection hit PIN diode
       L(PORTB, RIGHT);
       _delay_us(500);
-      if (abs(adc_val - get(0)) > THRESHOLD)
+      if (abs(adc_val - get()) > THRESHOLD)
          right = 1;
       else
          right = 0;
@@ -230,7 +230,7 @@ int main(void) {
 
             // additional delay, because previous loop was shorter
             // due to delay = 0
-            _delay_ms(100);
+            _delay_ms(50);
          }
 
       if (right != right_prev)
