@@ -18,7 +18,7 @@
 #define RIGHT PB4
 
 // ADC threshold
-#define THRESHOLD 0x3AF
+#define THRESHOLD 0x0F
 
 // payloads
 const uint8_t analog[] = {0x6E, 0x51, 0x84, 0x03, 0x60, 0x00, 0x01, 0xd9};
@@ -37,8 +37,8 @@ void byte(uint8_t left, uint8_t right) {
 
    H(DDRB, SDA_LEFT);
    H(DDRB, SDA_RIGHT);
-   
-   do { 
+
+   do {
       if (left & (1 << i)) {
          H(PORTB, SDA_LEFT);
       } else {
@@ -63,7 +63,7 @@ void byte(uint8_t left, uint8_t right) {
    // let slaves pull down SDA
    L(DDRB, SDA_LEFT);
    L(DDRB, SDA_RIGHT);
-   
+
    // wait for reply
    _delay_us(50);
 
@@ -111,7 +111,7 @@ void cmd(const uint8_t *left, const uint8_t *right, const uint8_t length) {
    // strat clock data
    for(i=0; i < length; i++)
       byte(left[i], right[i]);
-    
+
    H(DDRB, SDA_LEFT);
    H(DDRB, SDA_RIGHT);
 
@@ -142,15 +142,15 @@ uint16_t get(uint8_t pin) {
 
    // reset pin register
    ADMUX&=~0x07;
-   
+
    // get data from pin
    ADMUX|=pin;
 
    // start
-   H(ADCSRA, ADSC);   
+   H(ADCSRA, ADSC);
 
    // wait for end
-   while(IS(ADCSRA, ADSC)); 
+   while(IS(ADCSRA, ADSC));
 
    return ADCW;
 }
@@ -187,12 +187,17 @@ int main(void) {
    // delay used to control relay by IR diodes power cycle length
    uint8_t delay = 1;
 
+   uint16_t adc_val = 0;
 
    while(1) {
+
+      // get base for adc change detection
+      adc_val = get(0);
+
       // check if left IR reflection hit PIN diode
       L(PORTB, LEFT);
       _delay_us(500);
-      if (get(0) < THRESHOLD)
+      if (abs(adc_val - get(0)) > THRESHOLD)
          left = 1;
       else
          left = 0;
@@ -204,21 +209,22 @@ int main(void) {
       if(delay)
          _delay_ms(50);
 
+      // get base for adc change detection
+      adc_val = get(0);
+
       // check if right IR reflection hit PIN diode
       L(PORTB, RIGHT);
       _delay_us(500);
-      if (get(0) < THRESHOLD)
+      if (abs(adc_val - get(0)) > THRESHOLD)
          right = 1;
       else
          right = 0;
       H(PORTB, RIGHT);
 
-
       if (left != left_prev)
          if (left_prev == 1 && right == 1) {
             // send command to monitors (switch to server displays)
             cmd(dvi, dvi, CMD_LENGTH);
-
             // disable relay power
             delay = 1;
          }
@@ -227,14 +233,12 @@ int main(void) {
          if (left == 1 && right_prev == 1) {
             // send command to monitors (switch to laptop displays)
             cmd(analog, hdmi, CMD_LENGTH);
-
             // enable relay power
             delay = 0;
          }
 
       left_prev  = left;
       right_prev = right;
-
    }
 
 	return 0;
